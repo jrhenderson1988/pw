@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+
+# To generate a key, run:
+# $ gpg --full-generate-key
+#
+# It is recommended to use 4096 bit RSA kets. You SHOULD use a passphrase to protect your key. Otherwise, anyone gaining
+# access to your system would end up being able to decrypt your passwords. When attempting to decrypt, GPG will prompt
+# for your passphrase, to unlock your key and it will cache for a little while to avoid having to constrantly re-enter 
+# it.
+#
+# Make sure that you set your work email address as the user ID (and it should match the RECIPIENT variable below). The
+# recipient is used to determine which key to use when encrypting the pw files.
+
+# DEVELOPER NOTES:
+# List total keys by email: gpg --list-keys --with-colons | grep <email> | wc -l | xargs
+
+PW_PATH="$HOME/.pw"
+RECIPIENT_FILE_PATH="$PW_PATH/recipient"
+PW_EXTENSION="pw"
+
+UPPERCASE='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+LOWERCASE='abcdefghijklmnopqrstuvwxyz'
+NUMBERS='0123456789'
+SYMBOLS='!@#$%^&*'
+GEN_ALPHABET="$UPPERCASE$LOWERCASE$NUMBERS$SYMBOLS"
+GEN_LENGTH=32
+
+CMD=${1-"ls"}
+
+function gen_pw() {
+  GENERATED=""
+  for i in $(seq 1 $GEN_LENGTH) ; do
+    GENERATED="${GENERATED}${GEN_ALPHABET:RANDOM%${#GEN_ALPHABET}:1}"
+  done
+  echo "$GENERATED"
+}
+
+function decrypt() {
+  echo "$(gpg --decrypt --quiet "$1")" | tr -d '\n'
+}
+
+function encrypt() {
+  gpg --recipient "$1" --output "$3" --encrypt "$2"
+}
+
+# INITIAL CHECKS
+
+# Ensure that the directory exists (create it if missing)
+if [ ! -d "$PW_PATH" ]; then
+  mkdir -p "$PW_PATH"
+fi
+
+# Load the recipient from the file
+if [ -e "$RECIPIENT_FILE_PATH" ]; then
+  RECIPIENT=$(cat "$RECIPIENT_FILE_PATH" | tr -d '\n')
+else
+  echo "Recipient file does not exist"
+  exit 1
+fi
+
+
+# ONE ARG COMMANDS
+
+if [ "$CMD" == "ls" ]; then
+  for f in "$PW_PATH"/*; do
+    if [ -f "$f" ]; then
+      f="$(basename "$f")"
+      ext="${f##*.}"
+      if [ "$ext" == "$PW_EXTENSION" ]; then
+        echo ${f%.*}
+      fi
+    fi
+  done
+
+  exit 0
+fi
+
+if [ "$CMD" == "gen" ]; then
+  generated=$(gen_pw)
+  echo "$generated"
+  exit 0
+fi
+
+if [ "$CMD" == "gencp" ]; then
+  generated=$(gen_pw)
+  echo "$generated" | tr -d '\n' | pbcopy
+  echo "Generated and copied to clipboard"
+  exit 0
+fi
+
+# TWO ARG COMMANDS (name as the second argument)
+
+NAME=$2
+if [ -z "$NAME" ]; then
+  echo "Usage: $0 $CMD <name>"
+  exit 1
+fi
+PW_FILE_PATH="$PW_PATH/$NAME.$PW_EXTENSION"
+
+if [ "$CMD" == "add" ]; then
+  if [ -e "$PW_FILE_PATH" ]; then
+    echo "$NAME already exists (path=$PW_FILE_PATH)"
+    exit 1
+  else
+    # https://unit.stackexchange.com/questions/181937/how-to-create-a-temporary-file-in-shall-script
+    TMP_FILE_PATH=$(mktemp)
+    vim "$TMP_FILE_PATH"
+    echo "$(cat "$TMP_FILE_PATH" | xargs)" > "$TMP_FILE_PATH"
+    encrypt "$RECIPIENT" "$TMP_FILE_PATH" "$PW_FILE_PATH"
+    rm "$TMP_FILE_PATH"
+    exit 0
+  fi
+fi
+
+if [ "$CMD" == "edit" ]; then
+  if [ -e "$PW_FILE_PATH" ]; then
+    echo "... TODO ..."
+    exit 0
+  else
+    echo "$NAME does not exist (path=$PW_FILE_PATH)"
+    exit 1
+  fi
+fi
+
+if [ "$CMD" == "cp" ]; then
+  if [ -e "$PW_FILE_PATH" ]; then
+    decrypt $PW_FILE_PATH | pbcopy
+    echo "Copied to clipboard"
+    exit 0
+  else
+    echo "$NAME does not exist (path=$PW_FILE_PATH)"
+    exit 1
+  fi
+fi
+
+if [ "$CMD" == "show" ]; then
+  if [ -e "$PW_FILE_PATH" ]; then
+    VALUE=$(decrypt $PW_FILE_PATH)
+    echo "$VALUE"
+    exit 0
+  else
+    echo "$NAME does not exist (path=$PW_FILE_PATH)"
+    exit 1
+  fi
+fi
+
+if [ "$CMD" == "rm" ]; then
+  if [ -e "$PW_FILE_PATH" ]; then
+    echo "Are you sure you want to delete $NAME (Warning: this is not reversible)?"
+    read -p "> Enter DELETE to confirm (anything else will cancel): " confirm
+    if [ "$confirm" == "DELETE" ]; then
+      rm "$PW_FILE_PATH"
+      echo "Deleted $NAME"
+      exit 0
+    else
+      echo "Cancelled deletion of $NAME"
+      exit 0
+    fi
+  else
+    echo "$NAME does not exist (path-=$PW_FILE_PATH)"
+    exit 1
+  fi
+fi
+
+
+echo "Unrecgonised command: $CMD"
+exit 1
