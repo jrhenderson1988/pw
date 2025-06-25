@@ -32,7 +32,20 @@ file as the email for the GPG key:
 $ gpg --full-generate-key
 ```
 
-Recommended settings:
+### Recommended settings:
 - RSA
 - 4096 bits
 - A strong passphrase (you'll use this to unlock your keypair when accessing passwords)
+
+## Usage
+
+| Command          | Comments                                                                                                   |
+|------------------|------------------------------------------------------------------------------------------------------------|
+| `pw ls`          | List your passwords                                                                                        |
+| `pw add <name>`  | Add a password named `<name>` - will launch `vim` and you should enter your password and save the file     |
+| `pw gen`         | Generate a random password and output to stdout                                                            |
+| `pw gencp`       | Generate a random password and copy it to the clipboard                                                    |
+| `pw show <name>` | Show a password. You will be prompted for your passphrase and the password will be printed to stdout       |
+| `pw cp <name>`   | Copy a password to the clipboard. You will be prompted for your passphrase                                 |
+| `pw rm <name>`   | Delete a password. You will be asked to confirm by entering the text `DELETE`. This action is irreversible |
+
