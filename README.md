@@ -7,7 +7,7 @@ A simple, local-only password manager, that uses GPG.
 Add this repository to your PATH by adding the following to `~/.zshrc`:
 
 ```bash
-PATH="$PATH:/path/to/pw"
+export PATH="$PATH:/path/to/pw"
 ```
 
 Make sure you restart your terminal or `source` your .zshrc
