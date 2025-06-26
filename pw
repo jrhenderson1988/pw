@@ -1,21 +1,7 @@
 #!/usr/bin/env bash
 
-# To generate a key, run:
-# $ gpg --full-generate-key
-#
-# It is recommended to use 4096 bit RSA kets. You SHOULD use a passphrase to protect your key. Otherwise, anyone gaining
-# access to your system would end up being able to decrypt your passwords. When attempting to decrypt, GPG will prompt
-# for your passphrase, to unlock your key and it will cache for a little while to avoid having to constrantly re-enter 
-# it.
-#
-# Make sure that you set your work email address as the user ID (and it should match the RECIPIENT variable below). The
-# recipient is used to determine which key to use when encrypting the pw files.
-
-# DEVELOPER NOTES:
-# List total keys by email: gpg --list-keys --with-colons | grep <email> | wc -l | xargs
-
 PW_PATH="$HOME/.pw"
-RECIPIENT_FILE_PATH="$PW_PATH/recipient"
+IDENTITY_FILE_PATH="$PW_PATH/identity"
 PW_EXTENSION="pw"
 
 UPPERCASE='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -43,6 +29,10 @@ function encrypt() {
   gpg --recipient "$1" --output "$3" --encrypt "$2"
 }
 
+function total_keys_with_identity() {
+  gpg --list-keys --with-colons --quiet | grep "$1" | wc -l | xargs
+}
+
 # INITIAL CHECKS
 
 # Ensure that the directory exists (create it if missing)
@@ -50,16 +40,48 @@ if [ ! -d "$PW_PATH" ]; then
   mkdir -p "$PW_PATH"
 fi
 
-# Load the recipient from the file
-if [ -e "$RECIPIENT_FILE_PATH" ]; then
-  RECIPIENT=$(cat "$RECIPIENT_FILE_PATH" | tr -d '\n')
+# Load the identity from the file
+if [ -e "$IDENTITY_FILE_PATH" ]; then
+  IDENTITY=$(cat "$IDENTITY_FILE_PATH" | tr -d '\n')
+elif [ "$CMD" == "init" ]; then
+  read -p "Enter your email address: " email
+    
+  matching_keys=$(total_keys_with_identity "$email")
+  if [ "$matching_keys" == "0" ]; then
+    echo "Generating key..."
+    TMP_FILE_PATH=$(mktemp)
+    cat > "$TMP_FILE_PATH" <<EOF
+Key-Type: RSA
+Key-Length: 4096
+Subkey-Type: RSA
+Subkey-Length: 4096
+Name-Real: pw
+Name-Email: $email
+Expire-Date: 0
+%commit
+EOF
+    gpg --batch --pinentry-mode=ask --full-generate-key --quiet $TMP_FILE_PATH
+    rm $TMP_FILE_PATH
+  else
+    echo "Key already exists. Skipping key generation"
+  fi
+
+  echo "Writing identity file $IDENTITY_FILE_PATH"
+  echo "$email" > "$IDENTITY_FILE_PATH"
+  echo "Initialisation complete"
+  exit 0
 else
-  echo "Recipient file does not exist"
+  echo "Not yet initialised. Run 'pw init' to set up"
   exit 1
 fi
 
 
 # ONE ARG COMMANDS
+
+if [ "$CMD" == "init" ]; then
+  echo "Already initialized"
+  exit 1
+fi
 
 if [ "$CMD" == "ls" ]; then
   for f in "$PW_PATH"/*; do
@@ -106,7 +128,7 @@ if [ "$CMD" == "add" ]; then
     TMP_FILE_PATH=$(mktemp)
     vim "$TMP_FILE_PATH"
     echo "$(cat "$TMP_FILE_PATH" | xargs)" > "$TMP_FILE_PATH"
-    encrypt "$RECIPIENT" "$TMP_FILE_PATH" "$PW_FILE_PATH"
+    encrypt "$IDENTITY" "$TMP_FILE_PATH" "$PW_FILE_PATH"
     rm "$TMP_FILE_PATH"
     exit 0
   fi
@@ -146,7 +168,7 @@ fi
 
 if [ "$CMD" == "rm" ]; then
   if [ -e "$PW_FILE_PATH" ]; then
-    echo "Are you sure you want to delete $NAME (Warning: this is not reversible)?"
+    echo "Are you sure you want to delete $NAME? (Warning: this is not reversible)"
     read -p "> Enter DELETE to confirm (anything else will cancel): " confirm
     if [ "$confirm" == "DELETE" ]; then
       rm "$PW_FILE_PATH"
