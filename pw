@@ -13,27 +13,29 @@ GEN_LENGTH=32
 
 CMD=${1-"ls"}
 
-# function gen_pw() {
-#   GENERATED=""
-#   for i in $(seq 1 $GEN_LENGTH) ; do
-#     GENERATED="${GENERATED}${GEN_ALPHABET:RANDOM%${#GEN_ALPHABET}:1}"
-#   done
-#   echo "$GENERATED"
-# }
-
 function gen_pw() {
   # biggest multiple of length of alphabet that can fit into 256 to avoid modulo bias
   limit=$((256 / ${#GEN_ALPHABET} * ${#GEN_ALPHABET}))
-  password=""
+  # generate 2 x GEN_LENGTH bytes with openssl each invocation
+  random_size=$((2 * $GEN_LENGTH))
 
-  while [ "${#password}" -lt "$GEN_LENGTH" ]; do
-    byte=$(openssl rand -hex 1)
-    n=$((16#$byte))
-    [ "$n" -lt "$limit" ] || continue # avoid modulo bias - if we end up with an index > limit, skip
-    password+=${GEN_ALPHABET:n%${#GEN_ALPHABET}:1}
+  generated=""
+  while [ "${#generated}" -lt "$GEN_LENGTH" ]; do
+    random=$(openssl rand -hex $random_size)
+
+    for ((i = 0; i < ${#random} && ${#generated} < GEN_LENGTH; i += 2 )); do
+      byte="${random:i:2}" # get 2 hex characters i.e. 1 byte
+      n=$((16#$byte)) # turn hex into an integer
+      
+      # avoid modulo bias - if we end up with an index >= limit, skip
+      [ "$n" -lt "$limit" ] || continue
+      
+      generated+=${GEN_ALPHABET:n%${#GEN_ALPHABET}:1}
+    done
+    
   done
 
-  echo "$password"
+  echo "$generated"
 }
 
 function decrypt() {
