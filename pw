@@ -12,6 +12,12 @@ if ! command -v openssl >/dev/null 2>&1; then
   exit 1
 fi
 
+# Ensure vim is installed.
+if ! command -v vim >/dev/null 2>&1; then
+  echo "Error: vim is required but was not found." >&2
+  exit 1
+fi
+
 PW_PATH="$HOME/.pw"
 IDENTITY_FILE_PATH="$PW_PATH/identity"
 PW_EXTENSION="pw"
