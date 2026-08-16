@@ -162,7 +162,17 @@ if [ "$CMD" == "add" ]; then
     # https://unit.stackexchange.com/questions/181937/how-to-create-a-temporary-file-in-shall-script
     TMP_FILE_PATH=$(mktemp)
     vim "$TMP_FILE_PATH"
-    echo "$(cat "$TMP_FILE_PATH" | xargs)" > "$TMP_FILE_PATH"
+    content=$(<"$TMP_FILE_PATH") # load file contents
+    content="${content#"${content%%[![:space:]]*}"}" # trim leading whitespace
+    content="${content%"${content##*[![:space:]]}"}" # trim trailing whitespace
+    if [[ "$content" == *[[:space:]]* ]]; then
+      echo "Whitespace characters (spaces, tabs, newlines etc.) are not allowed in passwords"
+      exit 1
+    elif [[ "$content" == "" ]]; then
+      echo "Password cannot be blank"
+      exit 1
+    fi
+    printf '%s' "$content" > "$TMP_FILE_PATH"
     encrypt "$IDENTITY" "$TMP_FILE_PATH" "$PW_FILE_PATH"
     rm "$TMP_FILE_PATH"
     exit 0
