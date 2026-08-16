@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 
+# Ensure gpg is installed.
+if ! command -v gpg >/dev/null 2>&1; then
+  echo "Error: gpg is required but was not found." >&2
+  exit 1
+fi
+
+# Ensure openssl is installed.
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "Error: openssl is required but was not found." >&2
+  exit 1
+fi
+
+# Ensure vim is installed.
+if ! command -v vim >/dev/null 2>&1; then
+  echo "Error: vim is required but was not found." >&2
+  exit 1
+fi
+
 PW_PATH="$HOME/.pw"
 IDENTITY_FILE_PATH="$PW_PATH/identity"
 PW_EXTENSION="pw"
@@ -14,11 +32,28 @@ GEN_LENGTH=32
 CMD=${1-"ls"}
 
 function gen_pw() {
-  GENERATED=""
-  for i in $(seq 1 $GEN_LENGTH) ; do
-    GENERATED="${GENERATED}${GEN_ALPHABET:RANDOM%${#GEN_ALPHABET}:1}"
+  # biggest multiple of length of alphabet that can fit into 256 to avoid modulo bias
+  limit=$((256 / ${#GEN_ALPHABET} * ${#GEN_ALPHABET}))
+  # generate 2 x GEN_LENGTH bytes with openssl each invocation
+  random_size=$((2 * $GEN_LENGTH))
+
+  generated=""
+  while [ "${#generated}" -lt "$GEN_LENGTH" ]; do
+    random=$(openssl rand -hex $random_size)
+
+    for ((i = 0; i < ${#random} && ${#generated} < GEN_LENGTH; i += 2 )); do
+      byte="${random:i:2}" # get 2 hex characters i.e. 1 byte
+      n=$((16#$byte)) # turn hex into an integer
+      
+      # avoid modulo bias - if we end up with an index >= limit, skip
+      [ "$n" -lt "$limit" ] || continue
+      
+      generated+=${GEN_ALPHABET:n%${#GEN_ALPHABET}:1}
+    done
+    
   done
-  echo "$GENERATED"
+
+  echo "$generated"
 }
 
 function decrypt() {
